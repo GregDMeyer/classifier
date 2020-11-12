@@ -1,15 +1,16 @@
 import tkinter as tk
 from PIL import Image, ImageTk
-import threading
+from sys import stdin
 
 class Display:
 
-    def __init__(self, fname):
+    def __init__(self, fname=None):
         self.root = tk.Tk()
-        self.root.title(fname)
 
+        self.root.title(fname)
         self.panel = tk.Label(self.root, image=self._get_tk_img(fname))
         self.panel.pack(side="bottom", fill="both", expand="yes")
+        self.root.update()
 
     def destroy(self):
         self.root.destroy()
@@ -23,3 +24,15 @@ class Display:
         self.root.title(fname)
         self.panel.configure(image=self._get_tk_img(fname))
         self.root.update()
+
+
+def main():
+    d = None
+    for fname in stdin:
+        if d is None:
+            d = Display(fname.strip())
+        else:
+            d.update(fname.strip())
+
+if __name__ == '__main__':
+    main()

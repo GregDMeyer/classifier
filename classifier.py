@@ -5,13 +5,8 @@ import csv
 import readline
 from glob import iglob
 from time import sleep
-
-from display import Display
-
-# this doesn't work because of syntax errors :(
-from sys import version_info
-if version_info.major != 3:
-    raise RuntimeError("classifier.py requires Python 3.")
+import sys
+from subprocess import Popen, PIPE, STDOUT
 
 SPEC_FILE = join(split(__file__)[0], 'default_species.txt')
 
@@ -69,9 +64,9 @@ class Classifier:
 
     def run(self):
         # start up the GUI
-        self.display = Display(join(self.img_dir, self.img_files[0]))
+        self.display_proc = Popen([sys.executable, 'display.py'], stdin=PIPE)
         self.data_loop()
-        self.display.destroy()
+        self.display_proc.stdin.close()
 
     def data_loop(self):
         try:
@@ -153,7 +148,8 @@ class Classifier:
         fname = self.img_files[self.img_idx]
         sample, obj = self.split_filename(fname)
 
-        self.display.update(join(self.img_dir, fname))
+        self.display_proc.stdin.write((join(self.img_dir, fname)+'\n').encode())
+        self.display_proc.stdin.flush()
 
         if sample != self.sample:
             raise RuntimeError("Image has different sample name? '{}' and '{}' "
