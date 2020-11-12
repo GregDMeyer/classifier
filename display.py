@@ -5,21 +5,13 @@ import threading
 class Display:
 
     def __init__(self, fname):
-        self.fname = fname
-
         self.root = tk.Tk()
-        self.root.title(self.fname)
+        self.root.title(fname)
 
-        self.panel = tk.Label(self.root, image=self._get_tk_img(self.fname))
+        self.panel = tk.Label(self.root, image=self._get_tk_img(fname))
         self.panel.pack(side="bottom", fill="both", expand="yes")
 
-        self.root.bind("<<update_event>>", self.eventhandler)  # event triggered by background thread
-        self.root.bind("<<done_event>>", self.destroy)
-
-    def run(self):
-        self.root.mainloop()
-
-    def destroy(self, state=None):
+    def destroy(self):
         self.root.destroy()
 
     def _get_tk_img(self, filename):
@@ -27,7 +19,7 @@ class Display:
         self.tk_img = ImageTk.PhotoImage(self.pil_img)
         return self.tk_img
 
-    def eventhandler(self, state=None):
-        self.root.title(self.fname)
-        self.panel.configure(image=self._get_tk_img(self.fname))
+    def update(self, fname):
+        self.root.title(fname)
+        self.panel.configure(image=self._get_tk_img(fname))
         self.root.update()

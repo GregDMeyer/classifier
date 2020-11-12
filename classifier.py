@@ -3,10 +3,8 @@ from argparse import ArgumentParser
 from os.path import isfile, join, split, basename
 import csv
 import readline
-import threading
 from glob import iglob
 from time import sleep
-from sys import stdin
 
 from display import Display
 
@@ -16,10 +14,6 @@ if version_info.major != 3:
     raise RuntimeError("classifier.py requires Python 3.")
 
 SPEC_FILE = join(split(__file__)[0], 'default_species.txt')
-
-def safe_input(prompt):
-    print(prompt, end='', flush=True)
-    return stdin.readline()[:-1]
 
 def parse_args():
     p = ArgumentParser(description="Input classification data to a CSV file. If the "
@@ -76,22 +70,18 @@ class Classifier:
     def run(self):
         # start up the GUI
         self.display = Display(join(self.img_dir, self.img_files[0]))
-
-        self.thd = threading.Thread(target=self.data_loop)
-        self.thd.daemon = True
-        self.thd.start()  # start timer loop
-
-        self.display.run()
-        self.thd.join()
+        self.data_loop()
+        self.display.destroy()
 
     def data_loop(self):
-        while self.enter_data():
+        try:
+            while self.enter_data():
+                pass
+        except KeyboardInterrupt:
             pass
 
         if self.img_idx >= len(self.img_files):
             print('All images identified!')
-
-        self.display.root.event_generate("<<done_event>>", when="tail")
 
     def get_img_files(self, img_dir):
         self.img_files = sorted(basename(x) for x in iglob(join(img_dir, "*.jpg")))
@@ -163,8 +153,7 @@ class Classifier:
         fname = self.img_files[self.img_idx]
         sample, obj = self.split_filename(fname)
 
-        self.display.fname = join(self.img_dir, fname)
-        self.display.root.event_generate("<<update_event>>", when="tail")
+        self.display.update(join(self.img_dir, fname))
 
         if sample != self.sample:
             raise RuntimeError("Image has different sample name? '{}' and '{}' "
@@ -181,9 +170,9 @@ class Classifier:
 
         self._register_species(spec)
 
-        conf = safe_input("Confidence (1=low, 2=med, 3=high): ")
+        conf = input("Confidence (1=low, 2=med, 3=high): ")
         while conf not in ["1", "2", "3"]:
-            conf = safe_input("Type 1, 2, or 3 for confidence: ")
+            conf = input("Type 1, 2, or 3 for confidence: ")
         conf = int(conf)
 
         if fname in self.data:
@@ -226,7 +215,7 @@ class Completer:
         readline.set_completer(self.complete)
         readline.set_completer_delims('')
         readline.parse_and_bind('tab: complete')
-        rtn = safe_input(query_str)
+        rtn = input(query_str)
         readline.set_completer(None)
         return rtn
 
