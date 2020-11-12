@@ -1,8 +1,13 @@
 
 from argparse import ArgumentParser
-from os.path import isfile, join, split
+from os.path import isfile, join, split, basename
 import csv
 import readline
+import threading
+from glob import iglob
+from time import sleep
+
+from display import Display
 
 # this doesn't work because of syntax errors :(
 from sys import version_info
@@ -16,10 +21,11 @@ def parse_args():
                                    "output file already exists, it will be opened and "
                                    "appended to. Press tab to autocomplete known species names.")
 
-    p.add_argument("csvfile", help="The output CSV file")
+    p.add_argument("img_directory", help="the directory containing the images")
+    p.add_argument("initials", help="your initials (to mark the output CSV)")
     p.add_argument("species_names", nargs='?', default=SPEC_FILE,
                    help="A list of additional species names for autocomplete "
-                        "[default: 'default_species.txt']")
+                        "[default: '"+SPEC_FILE+"']")
 
     args = p.parse_args()
 
@@ -34,16 +40,24 @@ def parse_args():
     return args
 
 class Classifier:
-    def __init__(self, filename):
+    def __init__(self, img_dir, initials):
 
-        self.sample = None
-        self.data = []              # will be list of tuples of (species, confidence)
+        self.img_dir = img_dir
+        self.img_files = None
+        self.get_img_files(self.img_dir)
+
+        if not self.img_files:
+            raise FileNotFoundError("no .jpg images found in directory {}".format(img_dir))
+
+        self.sample = self.img_files[0].split('_')[0]
+        self.f = self.sample+"_species_"+initials+".csv"
+
+        self.data = {}              # will be dict of obj -> (species, confidence)
         self.known_species = set()
         self.lower_species = set()  # the species, in lowercase
-        
+
         self.csv_headers = ['Sample Name', 'Obj. #', 'Species', 'Confidence']
-        
-        self.f = filename
+
         if isfile(self.f):
             print("Loading data from '{}'...".format(self.f))
             self._load_existing()
@@ -51,7 +65,38 @@ class Classifier:
             print("{} objects already in file.".format(len(self.data)))
         else:
             print("Generating new CSV file '{}'".format(self.f))
-            self._init_fields()
+
+        self.img_idx = 0
+
+    def run(self):
+        # start up the GUI
+        self.display = Display(join(self.img_dir, self.img_files[0]))
+
+        self.thd = threading.Thread(target=self.data_loop)
+        self.thd.daemon = True
+        self.thd.start()  # start timer loop
+
+        self.display.run()
+        self.thd.join()
+
+    def data_loop(self):
+        try:
+            while self.enter_data():
+                pass
+            print('All images identified!')
+        except KeyboardInterrupt:
+            self.display.root.event_generate("<<done_event>>", when="tail")
+
+    def get_img_files(self, img_dir):
+        self.img_files = sorted(basename(x) for x in iglob(join(img_dir, "*.jpg")))
+
+    def gen_filename(self, obj_num):
+        return '_'.join([self.sample, 'obj'+str(obj_num).zfill(5), 'plane000.jpg'])
+
+    def split_filename(self, fname):
+        sample, obj, _ = fname.split('_')
+        obj = int(obj[3:])
+        return sample, obj
 
     def _load_existing(self):
         with open(self.f, newline='') as csvfile:
@@ -60,11 +105,12 @@ class Classifier:
             try:
                 header = next(r)
             except StopIteration:
-                raise RuntimeError('file "" seems to be empty? delete it to '
-                                   'have classifier make a new file')
+                raise RuntimeError('file "{}" seems to be empty? delete it to '
+                                   'have classifier make a new file'.format(self.f))
 
             if header != self.csv_headers:
-                print(header, self.csv_headers)
+                print(header)
+                print(self.csv_headers)
                 raise RuntimeError('first line of file does not match correct column labels')
 
             for name, obj, spec, conf in r:
@@ -74,44 +120,55 @@ class Classifier:
                     err_str = "invalid object number '{}' in row {}".format(obj, len(self.data))
                     raise RuntimeError(err_str) from None
 
-                # first row
-                if self.sample is None:
-                    self.sample = name
-                    if obj != 1:
-                        raise RuntimeError("object numbers in file do not start at 1")                        
-                    
                 if name != self.sample:
                     raise RuntimeError("File contains different sample names? '{}' and '{}' "
                                        "found".format(self.sample, name))
-            
-                if obj != len(self.data) + 1:
-                    raise RuntimeError("Object numbers not in order? "
-                                       "Went from {} to {}".format(len(self.data), obj))
+
+                fname = self.gen_filename(obj)
+                obj_file = join(self.img_dir, fname)
+                if not isfile(obj_file):
+                    raise RuntimeError("No file '{}' found for object in CSV".format(obj_file))
 
                 self._register_species(spec)
-                self.data.append((spec, conf))
-        
-            if self.sample is None:
-                self._init_fields()   # we didn't get a sample name because file had no rows
 
-    def _init_fields(self):
-        self.sample = input("Enter sample name: ")
+                if fname in self.data:
+                    raise ValueError("file '{}' found twice in data?".format(fname))
+
+                self.data[fname] = (spec, conf)
 
     def _register_species(self, spec):
         if spec.lower() not in self.lower_species:
             self.lower_species.add(spec.lower())
             self.known_species.add(spec)
-        
+
     def add_names_from_file(self, filename):
         with open(filename) as f:
             for line in f:
                 self._register_species(line.strip())
 
     def enter_data(self):
+        # data has already been entered for this one
+        while self.img_idx < len(self.img_files) and self.img_files[self.img_idx] in self.data:
+            self.img_idx += 1
+
+        if self.img_idx >= len(self.img_files):
+            return False
+
+        fname = self.img_files[self.img_idx]
+        sample, obj = self.split_filename(fname)
+
+        self.display.fname = join(self.img_dir, fname)
+        self.display.root.event_generate("<<update_event>>", when="tail")
+
+        if sample != self.sample:
+            raise RuntimeError("Image has different sample name? '{}' and '{}' "
+                               "found".format(self.sample, name))
+
         print()
-        print("Object number: {}".format(len(self.data)+1))
+        print("Object number: {}".format(obj))
 
         spec = Completer(self.known_species).get_input("Enter species name: ")
+        spec = spec.strip()
         self._register_species(spec)
 
         conf = input("Confidence (1=low, 2=med, 3=high): ")
@@ -119,17 +176,22 @@ class Classifier:
             conf = input("Type 1, 2, or 3 for confidence: ")
         conf = int(conf)
 
-        self.data.append((spec, conf))
+        if fname in self.data:
+            raise ValueError("file '{}' already in data?".format(fname))
+
+        self.data[fname] = (spec, conf)
         self._write_file()
+
+        return True
 
     def _write_file(self):
         with open(self.f, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(self.csv_headers)
-            for i, val in enumerate(self.data):
-                writer.writerow([self.sample, str(i+1).zfill(5)] + list(val))
+            for fname, val in sorted(self.data.items(), key=lambda x: x[0]):
+                sample, obj = self.split_filename(fname)
+                writer.writerow([sample, str(obj).zfill(5)] + list(val))
 
-                
 class Completer:
     def __init__(self, options):
         self.options = options
@@ -139,7 +201,7 @@ class Completer:
         if state == 0:
             if text:
                 self.matches = [s for s in self.options
-                                if text.lower() in s.lower()]
+                                if s.lower().startswith(text.lower())]
             else:
                 self.matches = self.options
 
@@ -157,7 +219,7 @@ class Completer:
         rtn = input(query_str)
         readline.set_completer(None)
         return rtn
-    
+
 def main():
     args = parse_args()
 
@@ -167,22 +229,18 @@ def main():
     print()
 
     c = None
-    try:
-        c = Classifier(args.csvfile)
-        if args.species_names is not None:
-            c.add_names_from_file(args.species_names)
+    c = Classifier(args.img_directory, args.initials)
+    if args.species_names is not None:
+        c.add_names_from_file(args.species_names)
 
-        while True:
-            c.enter_data()
-    except KeyboardInterrupt:
-        pass
+    c.run()
 
     print()
     print()
     if c is None or not c.data:
         print('No objects recorded, file not written. Goodbye!')
     else:
-        print('{} objects written to file. Goodbye!'.format(len(c.data)))
+        print('{} objects stored in file. Goodbye!'.format(len(c.data)))
 
 if __name__ == '__main__':
     main()
