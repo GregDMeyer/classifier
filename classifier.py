@@ -50,7 +50,7 @@ class Classifier:
             raise FileNotFoundError("no .jpg images found in directory {}".format(img_dir))
 
         self.sample = self.img_files[0].split('_')[0]
-        self.f = self.sample+"_species_"+initials+".csv"
+        self.f = join(self.img_dir, self.sample+"_species_"+initials+".csv")
 
         self.data = {}              # will be dict of obj -> (species, confidence)
         self.known_species = set()
@@ -80,12 +80,13 @@ class Classifier:
         self.thd.join()
 
     def data_loop(self):
-        try:
-            while self.enter_data():
-                pass
+        while self.enter_data():
+            pass
+
+        if self.img_idx >= len(self.img_files):
             print('All images identified!')
-        except KeyboardInterrupt:
-            self.display.root.event_generate("<<done_event>>", when="tail")
+
+        self.display.root.event_generate("<<done_event>>", when="tail")
 
     def get_img_files(self, img_dir):
         self.img_files = sorted(basename(x) for x in iglob(join(img_dir, "*.jpg")))
@@ -169,6 +170,10 @@ class Classifier:
 
         spec = Completer(self.known_species).get_input("Enter species name: ")
         spec = spec.strip()
+
+        if spec == 'quit':
+            return False
+
         self._register_species(spec)
 
         conf = input("Confidence (1=low, 2=med, 3=high): ")
@@ -224,7 +229,7 @@ def main():
     args = parse_args()
 
     print('Welcome to the species classifier!')
-    print('Press tab to autocomplete species names; type Ctrl+C to quit.')
+    print('Press tab to autocomplete species names; type "quit" to quit.')
     print('The file is saved every time a new object is entered.')
     print()
 

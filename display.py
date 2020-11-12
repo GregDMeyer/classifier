@@ -23,8 +23,9 @@ class Display:
         self.root.destroy()
 
     def _get_tk_img(self, filename):
-        img = Image.open(filename)
-        return ImageTk.PhotoImage(img)
+        self.pil_img = Image.open(filename)
+        self.tk_img = ImageTk.PhotoImage(self.pil_img)
+        return self.tk_img
 
     def eventhandler(self, state=None):
         self.root.title(self.fname)
