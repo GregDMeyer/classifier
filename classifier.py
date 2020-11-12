@@ -9,6 +9,7 @@ import sys
 from subprocess import Popen, PIPE, STDOUT
 
 SPEC_FILE = join(split(__file__)[0], 'default_species.txt')
+DISPLAY_FILE = join(split(__file__)[0], 'display.py')
 
 def parse_args():
     p = ArgumentParser(description="Input classification data to a CSV file. If the "
@@ -64,7 +65,7 @@ class Classifier:
 
     def run(self):
         # start up the GUI
-        self.display_proc = Popen([sys.executable, 'display.py'], stdin=PIPE)
+        self.display_proc = Popen([sys.executable, DISPLAY_FILE], stdin=PIPE)
         self.data_loop()
         self.display_proc.stdin.close()
 
