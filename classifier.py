@@ -2,11 +2,15 @@
 from argparse import ArgumentParser
 from os.path import isfile, join, split, basename
 import csv
-import readline
 from glob import iglob
 from time import sleep
 import sys
 from subprocess import Popen, PIPE, STDOUT
+
+try:
+    import gnureadline as readline
+except ImportError:
+    import readline
 
 SPEC_FILE = join(split(__file__)[0], 'default_species.txt')
 DISPLAY_FILE = join(split(__file__)[0], 'display.py')
