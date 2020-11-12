@@ -6,6 +6,7 @@ import readline
 import threading
 from glob import iglob
 from time import sleep
+from sys import stdin
 
 from display import Display
 
@@ -15,6 +16,10 @@ if version_info.major != 3:
     raise RuntimeError("classifier.py requires Python 3.")
 
 SPEC_FILE = join(split(__file__)[0], 'default_species.txt')
+
+def safe_input(prompt):
+    print(prompt, end='', flush=True)
+    return stdin.readline()[:-1]
 
 def parse_args():
     p = ArgumentParser(description="Input classification data to a CSV file. If the "
@@ -176,9 +181,9 @@ class Classifier:
 
         self._register_species(spec)
 
-        conf = input("Confidence (1=low, 2=med, 3=high): ")
+        conf = safe_input("Confidence (1=low, 2=med, 3=high): ")
         while conf not in ["1", "2", "3"]:
-            conf = input("Type 1, 2, or 3 for confidence: ")
+            conf = safe_input("Type 1, 2, or 3 for confidence: ")
         conf = int(conf)
 
         if fname in self.data:
@@ -221,7 +226,7 @@ class Completer:
         readline.set_completer(self.complete)
         readline.set_completer_delims('')
         readline.parse_and_bind('tab: complete')
-        rtn = input(query_str)
+        rtn = safe_input(query_str)
         readline.set_completer(None)
         return rtn
 
