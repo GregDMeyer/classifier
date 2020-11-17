@@ -21,7 +21,7 @@ def parse_args():
                                    "appended to. Press tab to autocomplete known species names.")
 
     p.add_argument("img_directory", help="the directory containing the images")
-    p.add_argument("initials", help="your initials (to mark the output CSV)")
+    p.add_argument("initials", help="your initials (use 'combined' to classify diffs of existing files)")
     p.add_argument("species_names", nargs='?', default=SPEC_FILE,
                    help="A list of additional species names for autocomplete "
                         "[default: '"+SPEC_FILE+"']")
@@ -52,6 +52,7 @@ class Classifier:
         self.f = join(self.img_dir, self.sample+"_species_"+initials+".csv")
 
         self.data = {}              # will be dict of obj -> (species, confidence)
+        self.fdata = None           # data from other files, if initials == 'combined'
         self.known_species = set()
         self.lower_species = set()  # the species, in lowercase
 
@@ -59,11 +60,15 @@ class Classifier:
 
         if isfile(self.f):
             print("Loading data from '{}'...".format(self.f))
-            self._load_existing()
+            self._load_existing(self.f, self.data)
             print("Sample name: {}".format(self.sample))
             print("{} objects already in file.".format(len(self.data)))
         else:
             print("Generating new CSV file '{}'".format(self.f))
+
+        # find diffs of previous files
+        if initials == 'combined':
+            self._find_agreements()
 
         self.img_idx = 0
 
@@ -94,15 +99,43 @@ class Classifier:
         obj = int(obj[3:])
         return sample, obj
 
-    def _load_existing(self):
-        with open(self.f, newline='') as csvfile:
+    def _find_agreements(self):
+        self.fdata = {}
+        for csv_fname in iglob(join(self.img_dir, "*.csv")):
+            if csv_fname == self.f:
+                continue
+
+            self.fdata[csv_fname] = {}
+            self._load_existing(csv_fname, self.fdata[csv_fname], add_to_completer=False)
+
+        shortest = min(self.fdata.values(), key=lambda x: len(x))
+        for img_fname in shortest:
+            # skip it if we already have it recorded
+            if img_fname in self.data:
+                continue
+
+            # skip this image if one of the files didn't have it
+            if not all(img_fname in self.fdata[k] for k in self.fdata):
+                continue
+
+            # add it to our data if everyone agreed
+            if len(set(self.fdata[k][img_fname][0].lower().strip() for k in self.fdata)) > 1:
+                continue
+
+            # OK, if everyone agreed, add it to autocompleter
+            spec = shortest[img_fname][0]
+            self._register_species(spec)
+            self.data[img_fname] = (spec, 3)
+
+    def _load_existing(self, fname, data, add_to_completer=True):
+        with open(fname, newline='') as csvfile:
             r = csv.reader(csvfile)
 
             try:
                 header = next(r)
             except StopIteration:
                 raise RuntimeError('file "{}" seems to be empty? delete it to '
-                                   'have classifier make a new file'.format(self.f))
+                                   'have classifier make a new file'.format(fname)) from None
 
             if header != self.csv_headers:
                 print(header)
@@ -113,24 +146,25 @@ class Classifier:
                 try:
                     obj = int(obj)
                 except ValueError:
-                    err_str = "invalid object number '{}' in row {}".format(obj, len(self.data))
+                    err_str = "invalid object number '{}' in row {}".format(obj, len(data))
                     raise RuntimeError(err_str) from None
 
                 if name != self.sample:
                     raise RuntimeError("File contains different sample names? '{}' and '{}' "
                                        "found".format(self.sample, name))
 
-                fname = self.gen_filename(obj)
-                obj_file = join(self.img_dir, fname)
+                img_fname = self.gen_filename(obj)
+                obj_file = join(self.img_dir, img_fname)
                 if not isfile(obj_file):
                     raise RuntimeError("No file '{}' found for object in CSV".format(obj_file))
 
-                self._register_species(spec)
+                if add_to_completer:
+                    self._register_species(spec)
 
-                if fname in self.data:
-                    raise ValueError("file '{}' found twice in data?".format(fname))
+                if img_fname in data:
+                    raise ValueError("file '{}' found twice in data?".format(img_fname))
 
-                self.data[fname] = (spec, conf)
+                data[img_fname] = (spec, conf)
 
     def _register_species(self, spec):
         if spec.lower() not in self.lower_species:
@@ -158,10 +192,20 @@ class Classifier:
 
         if sample != self.sample:
             raise RuntimeError("Image has different sample name? '{}' and '{}' "
-                               "found".format(self.sample, name))
+                               "found".format(self.sample, sample))
 
         print()
         print("Object number: {}".format(obj))
+
+        if self.fdata is not None:
+            print("Previous IDs:")
+            for k in self.fdata:
+                initials = basename(k).split('_')[2][:-4]
+                if fname in self.fdata[k]:
+                    ospec, oconf = self.fdata[k][fname]
+                    print(" {}: {} (conf. {})".format(initials, ospec, oconf))
+                else:
+                    print(" {}: (not identified)".format(initials))
 
         spec = Completer(self.known_species).get_input("Enter species name: ")
         spec = spec.strip()
