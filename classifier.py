@@ -26,6 +26,7 @@ def parse_args():
     p.add_argument("species_names", nargs='?', default=SPEC_FILE,
                    help="A list of additional species names for autocomplete "
                         "[default: '"+SPEC_FILE+"']")
+    p.add_argument("--repro", action="store_true", help="Store proloculous data.")
 
     args = p.parse_args()
 
@@ -40,7 +41,7 @@ def parse_args():
     return args
 
 class Classifier:
-    def __init__(self, img_dir, initials):
+    def __init__(self, img_dir, initials, repro=False):
 
         self.img_dir = img_dir
         self.img_files = None
@@ -58,6 +59,9 @@ class Classifier:
         self.lower_species = set()  # the species, in lowercase
 
         self.csv_headers = ['Sample Name', 'Obj. #', 'Species', 'Confidence']
+        self.repro = repro
+        if repro:
+            self.csv_headers.append('Proloculous')
 
         if isfile(self.f):
             print("Loading data from '{}'...".format(self.f))
@@ -143,7 +147,14 @@ class Classifier:
                 print(self.csv_headers)
                 raise RuntimeError('first line of file does not match correct column labels')
 
-            for name, obj, spec, conf in r:
+            for row in r:
+                if not self.repro:
+                    name, obj, spec, conf = row
+                    row_data = (spec, conf)
+                else:
+                    name, obj, spec, conf, prolo = row
+                    row_data = (spec, conf, prolo)
+
                 try:
                     obj = int(obj)
                 except ValueError:
@@ -165,7 +176,7 @@ class Classifier:
                 if img_fname in data:
                     raise ValueError("file '{}' found twice in data?".format(img_fname))
 
-                data[img_fname] = (spec, conf)
+                data[img_fname] = row_data
 
     def _register_species(self, spec):
         if spec.lower() not in self.lower_species:
@@ -226,12 +237,20 @@ class Classifier:
 
             conf = int(conf)
 
+            if self.repro:
+                prolo = None
+                while prolo not in ["mega", "micro", "unk"]:
+                    prolo = input("Proloculous (mega, micro, unk): ")
+
         self._register_species(spec)
 
         if fname in self.data:
             raise ValueError("file '{}' already in data?".format(fname))
 
-        self.data[fname] = (spec, conf)
+        if not self.repro:
+            self.data[fname] = (spec, conf)
+        else:
+            self.data[fname] = (spec, conf, prolo)
         self._write_file()
 
         return True
@@ -281,7 +300,7 @@ def main():
     print()
 
     c = None
-    c = Classifier(args.img_directory, args.initials)
+    c = Classifier(args.img_directory, args.initials, args.repro)
     if args.species_names is not None:
         c.add_names_from_file(args.species_names)
 
