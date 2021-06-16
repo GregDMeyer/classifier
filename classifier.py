@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 from argparse import ArgumentParser
 from os.path import isfile, join, split, basename
@@ -207,18 +208,25 @@ class Classifier:
                 else:
                     print(" {}: (not identified)".format(initials))
 
-        spec = Completer(self.known_species).get_input("Enter species name: ")
-        spec = spec.strip()
+        spec = None
+        while spec is None:
+            spec = Completer(self.known_species).get_input("Enter species name: ")
+            spec = spec.strip()
 
-        if spec == 'quit':
-            return False
+            if spec == 'quit':
+                return False
+
+            conf = input("Confidence (1=low, 2=med, 3=high, u=change species): ")
+            while conf not in ["1", "2", "3", "u"]:
+                conf = input("Type 1, 2, or 3 for confidence: ")
+
+            if conf == 'u':
+                spec = None
+                continue
+
+            conf = int(conf)
 
         self._register_species(spec)
-
-        conf = input("Confidence (1=low, 2=med, 3=high): ")
-        while conf not in ["1", "2", "3"]:
-            conf = input("Type 1, 2, or 3 for confidence: ")
-        conf = int(conf)
 
         if fname in self.data:
             raise ValueError("file '{}' already in data?".format(fname))
