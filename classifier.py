@@ -27,6 +27,7 @@ def parse_args():
                    help="A list of additional species names for autocomplete "
                         "[default: '"+SPEC_FILE+"']")
     p.add_argument("--repro", action="store_true", help="Store proloculous data.")
+    p.add_argument("--filter", action="store_true", help="Only update certain species of existing file")
 
     args = p.parse_args()
 
@@ -41,7 +42,7 @@ def parse_args():
     return args
 
 class Classifier:
-    def __init__(self, img_dir, initials, repro=False):
+    def __init__(self, img_dir, initials, repro=False, filt=False):
 
         self.img_dir = img_dir
         self.img_files = None
@@ -60,6 +61,7 @@ class Classifier:
 
         self.csv_headers = ['Sample Name', 'Obj. #', 'Species', 'Confidence']
         self.repro = repro
+        self.filt = filt
         if repro:
             self.csv_headers.append('Proloculous')
 
@@ -69,11 +71,18 @@ class Classifier:
             print("Sample name: {}".format(self.sample))
             print("{} objects already in file.".format(len(self.data)))
         else:
+            if filt:
+                raise ValueError("filter option can only be used with an "
+                                 "existing file")
             print("Generating new CSV file '{}'".format(self.f))
 
         # find diffs of previous files
         if initials == 'combined':
             self._find_agreements()
+
+        self._species_filter = None
+        if self.filt:
+            self._get_species_filter()
 
         self.img_idx = 0
 
@@ -132,6 +141,26 @@ class Classifier:
             self._register_species(spec)
             self.data[img_fname] = (spec, 3)
 
+    def _get_species_filter(self):
+        done = False
+        self._species_filter = []
+        print()
+        print("Enter species to add to filter (tab complete enabled)")
+        print("Press enter on blank entry when complete")
+        while not done:
+            spec = Completer(self.known_species).get_input("Species name: ")
+            if not spec.strip():
+                done = True
+            else:
+                self._species_filter.append(spec.strip())
+
+        confirm = 'a'
+        while confirm.lower() not in 'yn':
+            confirm = input("Confirm species filter list (y/n): ")
+
+        if confirm == 'n':
+            self._get_species_filter()  # try again
+
     def _load_existing(self, fname, data, add_to_completer=True):
         with open(fname, newline='') as csvfile:
             r = csv.reader(csvfile)
@@ -142,18 +171,27 @@ class Classifier:
                 raise RuntimeError('file "{}" seems to be empty? delete it to '
                                    'have classifier make a new file'.format(fname)) from None
 
-            if header != self.csv_headers:
+            # in case we are adding prolo data to existing file
+            if header == self.csv_headers:
+                in_repro = self.repro
+            elif self.repro and header == self.csv_headers[:-1]:
+                in_repro = False
+            else:
                 print(header)
                 print(self.csv_headers)
                 raise RuntimeError('first line of file does not match correct column labels')
 
             for row in r:
-                if not self.repro:
+                if not in_repro:
                     name, obj, spec, conf = row
-                    row_data = (spec, conf)
+                    prolo = ''
                 else:
                     name, obj, spec, conf, prolo = row
+
+                if self.repro:
                     row_data = (spec, conf, prolo)
+                else:
+                    row_data = (spec, conf)
 
                 try:
                     obj = int(obj)
@@ -188,9 +226,25 @@ class Classifier:
             for line in f:
                 self._register_species(line.strip())
 
+    def _skip(self, idx):
+        if self.img_idx >= len(self.img_files):
+            return False
+
+        fname = self.img_files[self.img_idx]
+        if fname in self.data:
+            if not self.repro:
+                return True  # skip if we're not adding repro
+            elif self.data[fname][-1] != '':
+                return True
+
+            if self._species_filter is not None:
+                if self.data[fname][0] not in self._species_filter:
+                    return True
+
+        return False
+
     def enter_data(self):
-        # data has already been entered for this one
-        while self.img_idx < len(self.img_files) and self.img_files[self.img_idx] in self.data:
+        while self._skip(self.img_idx):
             self.img_idx += 1
 
         if self.img_idx >= len(self.img_files):
@@ -219,7 +273,13 @@ class Classifier:
                 else:
                     print(" {}: (not identified)".format(initials))
 
-        spec = None
+        if fname in self.data:
+            spec, conf = self.data[fname][:2]
+            print(f"Species: {spec}")
+            print(f"Conf.: {conf}")
+        else:
+            spec = conf = None
+
         while spec is None:
             spec = Completer(self.known_species).get_input("Enter species name: ")
             spec = spec.strip()
@@ -237,15 +297,12 @@ class Classifier:
 
             conf = int(conf)
 
-            if self.repro:
-                prolo = None
-                while prolo not in ["mega", "micro", "unk"]:
-                    prolo = input("Proloculous (mega, micro, unk): ")
+        if self.repro:
+            prolo = None
+            while prolo not in ["mega", "micro", "unk"]:
+                prolo = input("Proloculous (mega, micro, unk): ")
 
         self._register_species(spec)
-
-        if fname in self.data:
-            raise ValueError("file '{}' already in data?".format(fname))
 
         if not self.repro:
             self.data[fname] = (spec, conf)
@@ -300,7 +357,7 @@ def main():
     print()
 
     c = None
-    c = Classifier(args.img_directory, args.initials, args.repro)
+    c = Classifier(args.img_directory, args.initials, args.repro, args.filter)
     if args.species_names is not None:
         c.add_names_from_file(args.species_names)
 
