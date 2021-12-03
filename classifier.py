@@ -152,7 +152,7 @@ class Classifier:
             if not spec.strip():
                 done = True
             else:
-                self._species_filter.append(spec.strip())
+                self._species_filter.append(spec.strip().lower())
 
         confirm = 'a'
         while confirm.lower() not in 'yn':
@@ -238,7 +238,7 @@ class Classifier:
                 return True
 
             if self._species_filter is not None:
-                if self.data[fname][0] not in self._species_filter:
+                if self.data[fname][0].lower() not in self._species_filter:
                     return True
 
         return False
