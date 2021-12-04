@@ -287,11 +287,11 @@ class Classifier:
             if spec == 'quit':
                 return False
 
-            conf = input("Confidence (1=low, 2=med, 3=high, u=change species): ")
-            while conf not in ["1", "2", "3", "u"]:
+            conf = input("Confidence (1=low, 2=med, 3=high, c=change species): ")
+            while conf not in ["1", "2", "3", "c"]:
                 conf = input("Type 1, 2, or 3 for confidence: ")
 
-            if conf == 'u':
+            if conf == 'c':
                 spec = None
                 continue
 
@@ -299,8 +299,13 @@ class Classifier:
 
         if self.repro:
             prolo = None
-            while prolo not in ["mega", "micro", "unk"]:
-                prolo = input("Proloculous (mega, micro, unk): ")
+            while prolo not in ["mega", "micro", "unk", "c"]:
+                prolo = input("Proloculous (mega, micro, unk, c=change species): ")
+
+            # re-enter this species
+            if prolo == 'c':
+                del self.data[fname]
+                return True
 
         self._register_species(spec)
 
