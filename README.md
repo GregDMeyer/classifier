@@ -1,5 +1,7 @@
 ## Classifier
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7416245.svg)](https://doi.org/10.5281/zenodo.7416245)
+
 This repository contains a script to help quickly flip through a directory of specimen images, and manually record the species of each. The species can be tab-completed based on a list of known species names. Optionally can also query for information about reproductive mode. If a set of images has already been partially classified, the script will start back up where you left off.
 
 Run `python classifier.py --help` for information about how to run it.
