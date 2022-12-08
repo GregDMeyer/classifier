@@ -4,9 +4,8 @@ from argparse import ArgumentParser
 from os.path import isfile, join, split, basename
 import csv
 from glob import iglob
-from time import sleep
 import sys
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE
 
 try:
     import gnureadline as readline
